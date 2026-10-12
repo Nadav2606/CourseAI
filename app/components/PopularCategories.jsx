@@ -17,16 +17,16 @@ export default function PopularCategories({ categories }) {
   }
 
   return (
-    <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+    <div className="category-grid">
       {categories.map((category) => (
-        <Card key={category.query} className="course-category-card h-full border-slate-200 bg-white shadow-sm">
-          <CardHeader>
-            <div className="category-icon">{category.icon}</div>
-            <CardTitle className="text-xl">{category.title}</CardTitle>
-            <CardDescription className="min-h-12 leading-6">{category.description}</CardDescription>
+        <Card key={category.query} className="course-category-card">
+          <CardHeader className="category-card-header">
+            <div className="category-icon" aria-hidden="true">{category.icon}</div>
+            <CardTitle className="category-card-title">{category.title}</CardTitle>
+            <CardDescription className="category-card-description">{category.description}</CardDescription>
           </CardHeader>
-          <CardFooter className="mt-auto border-slate-100 bg-slate-50/70">
-            <Button variant="outline" className="h-10 w-full" disabled={Boolean(loading)} onClick={() => choose(category.query)}>
+          <CardFooter className="category-card-footer">
+            <Button variant="outline" className="category-card-button h-10 w-full" disabled={Boolean(loading)} onClick={() => choose(category.query)}>
               {loading === category.query ? <><Spinner /> מחפש קורסים...</> : "הצג קורסים"}
             </Button>
           </CardFooter>

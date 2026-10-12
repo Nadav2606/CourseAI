@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { cacheDiscoveredCourses } from "@/app/lib/discovered-courses";
+import ExpandableCourseCard from "@/app/components/ExpandableCourseCard";
 import { fetchCourses } from "@/app/lib/apify";
 import { getSessionUser } from "@/app/lib/auth";
 import connectDB from "@/app/lib/db";
 import Course from "@/app/models/Course";
 import DiscoverSearchForm from "@/app/components/DiscoverSearchForm";
 import PopularCategories from "@/app/components/PopularCategories";
-import SaveCourseButton from "@/app/components/SaveCourseButton";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { cleanCourseSnippet } from "@/app/lib/course-content";
 
 const popularCategories = [
   {
@@ -58,13 +59,6 @@ const popularCategories = [
   },
 ];
 
-function cleanDescription(text = "") {
-  return String(text)
-    .replace(/Read more\.{0,3}/gi, "")
-    .replace(/קרא עוד\.{0,3}/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 function siteName(url = "") {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -89,6 +83,13 @@ export default async function Discover({ searchParams }) {
       error = "לא הצלחנו להשלים את החיפוש כרגע. נסה שוב בעוד כמה רגעים.";
     }
   }
+  if (results.length) {
+    try {
+      results = await cacheDiscoveredCourses(results, q);
+    } catch (err) {
+      console.error("Course details storage error:", err);
+    }
+  }
   if (user && results.length) {
     await connectDB();
     const urls = results.map((r) => r.url).filter(Boolean);
@@ -102,7 +103,7 @@ export default async function Discover({ searchParams }) {
   }
 
   return (
-    <main dir="rtl" className="min-h-screen bg-slate-50/70">
+    <main dir="rtl" className="discover-page min-h-screen bg-slate-50/70">
       <section className="discover-hero border-b border-slate-200">
         <div className="mx-auto max-w-6xl px-5 py-16 text-center sm:px-8">
           <Badge variant="secondary" className="mb-5 rounded-full px-4 py-1.5">
@@ -115,7 +116,7 @@ export default async function Discover({ searchParams }) {
             חפש את התחום שמעניין אותך, גלה אפשרויות לימוד ושמור את הקורסים שתרצה
             לבדוק לעומק.
           </p>
-          <DiscoverSearchForm initialQuery={q} />
+          <DiscoverSearchForm key={q} initialQuery={q} />
         </div>
       </section>
 
@@ -164,67 +165,20 @@ export default async function Discover({ searchParams }) {
             <Separator className="mb-8" />
             <div className="course-results-grid">
               {results.map((result) => {
-                const description = cleanDescription(result.description);
-                const provider = siteName(result.url);
+                const description = cleanCourseSnippet(result.description);
+                const provider = result.provider || siteName(result.url);
                 return (
-                  <Card
+                  <ExpandableCourseCard
                     key={`${result.id}-${result.url}`}
-                    className="result-card course-result-card"
-                  >
-                    <CardHeader className="course-result-header">
-                      <div className="course-result-meta">
-                        <Badge variant="secondary" className="course-provider">
-                          {provider}
-                        </Badge>
-                        <span className="course-topic">{q}</span>
-                      </div>
-                      <CardTitle className="course-result-title">
-                        {result.title}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="course-result-content">
-                      {description ? (
-                        <details className="course-description">
-                          <summary>
-                            <span className="show-more">הצג עוד</span>
-                            <span className="show-less">הצג פחות</span>
-                          </summary>
-                          <p className="course-description-preview">
-                            {description}
-                          </p>
-                          <p className="course-description-full">
-                            {description}
-                          </p>
-                        </details>
-                      ) : (
-                        <p className="course-empty-description">
-                          פרטים נוספים על הקורס זמינים בעמוד הקורס.
-                        </p>
-                      )}
-                    </CardContent>
-                    <CardFooter className="course-result-footer">
-                      <SaveCourseButton
-                        loggedIn={Boolean(user)}
-                        initiallySaved={savedUrls.has(result.url)}
-                        course={{
-                          title: result.title,
-                          provider,
-                          category: q,
-                          url: result.url,
-                        }}
-                      />
-                      <a
-                        href={result.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1"
-                      >
-                        <Button className="h-11 w-full course-details-button">
-                          לפרטים <ExternalLink />
-                        </Button>
-                      </a>
-                    </CardFooter>
-                  </Card>
+                    detailsId={result.detailsId}
+                    title={result.title}
+                    description={description}
+                    provider={provider}
+                    category={q}
+                    url={result.url}
+                    loggedIn={Boolean(user)}
+                    initiallySaved={savedUrls.has(result.url)}
+                  />
                 );
               })}
             </div>

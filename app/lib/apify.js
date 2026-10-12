@@ -1,95 +1,119 @@
-const DEFAULT_ACTOR = "apify~rag-web-browser";
+const APIFY_ACTOR_ID = "apify~google-search-scraper";
 
-function normalizeResult(item, index) {
-  const url = item.metadata?.url || item.searchResult?.url || "";
+function getApifyToken() {
+  const token = process.env.APIFY_TOKEN;
+  if (!token) {
+    throw new Error("Missing APIFY_TOKEN in .env.local");
+  }
+  return token;
+}
 
-  const title =
-    item.metadata?.title || item.searchResult?.title || "תוצאת קורס";
-
-  const markdown = String(item.markdown || "");
-
-  const description =
-    item.searchResult?.description ||
-    markdown
-      .replace(/[#*_`>\[\]]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 280);
-
+function buildSearchInput(query) {
   return {
-    id: String(index),
-    title,
-    url,
-    description,
+    queries: `קורס ${query} בישראל`,
+    maxPagesPerQuery: 1,
+    countryCode: "il",
+    aiOverview: { scrapeFullAiOverview: false },
+    aiModeSearch: { enableAiMode: false },
+    geminiSearch: { enableGemini: false },
+    perplexitySearch: {
+      enablePerplexity: false,
+      returnImages: false,
+      returnRelatedQuestions: false,
+    },
+    chatGptSearch: { enableChatGpt: false },
+    copilotSearch: { enableCopilot: false },
+    maximumLeadsEnrichmentRecords: 0,
+    verifyLeadsEnrichmentEmails: false,
+    websiteContentScraper: { enable: false },
+    focusOnPaidAds: false,
+    searchLanguage: "",
+    languageCode: "",
+    forceExactMatch: false,
+    wordsInTitle: [],
+    wordsInText: [],
+    wordsInUrl: [],
+    mobileResults: false,
+    includeUnfilteredResults: false,
+    saveHtml: false,
+    saveHtmlToKeyValueStore: true,
+    includeIcons: false,
   };
 }
 
-export async function fetchCourses({ query } = {}) {
-  const token = process.env.APIFY_TOKEN;
-
-  if (!token) {
-    throw new Error("APIFY_TOKEN is not set");
-  }
-
-  const cleanQuery = String(query || "")
-    .trim()
-    .replace(/^קורס\s+/i, "");
-
-  if (!cleanQuery) {
-    throw new Error("Course search query is required");
-  }
-
-  const actor = process.env.APIFY_COURSES_ACTOR || DEFAULT_ACTOR;
-
-  const endpoint =
-    `https://api.apify.com/v2/acts/${actor}` +
-    `/run-sync-get-dataset-items` +
-    `?token=${encodeURIComponent(token)}` +
-    `&memory=2048`;
+async function runActor(input) {
+  const token = getApifyToken();
+  const endpoint = `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`;
 
   const response = await fetch(endpoint, {
     method: "POST",
-
-    headers: {
-      "Content-Type": "application/json",
-    },
-
-    body: JSON.stringify({
-      query: `קורס ${cleanQuery} בישראל`,
-
-      maxResults: 5,
-
-      outputFormats: ["markdown"],
-
-      requestTimeoutSecs: 40,
-
-      scrapingTool: "raw-http",
-
-      desiredConcurrency: 5,
-
-      maxRequestRetries: 1,
-
-      removeCookieWarnings: false,
-
-      debugMode: false,
-    }),
-
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
     cache: "no-store",
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-
-    console.error("Apify error:", errorText);
-
-    throw new Error(`Apify request failed: ${response.status}`);
+    console.error("Apify error:", response.status, errorText);
+    throw new Error(`Apify request failed: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
-
   if (!Array.isArray(data)) {
-    return [];
+    throw new Error("Unexpected Apify response: expected dataset items array");
   }
+  return data;
+}
 
-  return data.map(normalizeResult).filter((result) => result.url);
+function isLikelyCourse(result) {
+  const title = String(result?.title || "").trim();
+  const url = String(result?.url || "").trim();
+  const description = String(result?.description || "").trim();
+  if (!title || !url) return false;
+
+  const haystack = `${title} ${description}`.toLowerCase();
+  const rejectTitle = /(^|\s)(בחינת|בחינה|תקנון|מאגר בחינות|מועדי בחינות|ערעור על ציון)(\s|$)/;
+  const courseSignal = /(קורס|לימוד|לימודים|הכשרה|תוכנית לימודים|תכנית לימודים)/;
+
+  if (/\.pdf(?:$|[?#])/i.test(url)) return false;
+  if (rejectTitle.test(title)) return false;
+  return courseSignal.test(haystack);
+}
+
+function normalizeResult(result, index) {
+  const description = String(result?.description || "")
+    .replace(/\s*\.\.\.\s*Read more\s*$/i, "")
+    .trim();
+
+  return {
+    id: `${result?.position || index + 1}-${result?.url || index}`,
+    title: String(result?.title || "").trim(),
+    description,
+    provider: String(result?.websiteTitle || "").trim(),
+    url: String(result?.url || "").trim(),
+    position: Number(result?.position || index + 1),
+    source: "google-search-scraper",
+  };
+}
+
+export async function fetchCourses({ query }) {
+  const cleanQuery = String(query || "").trim();
+  if (!cleanQuery) return [];
+
+  const datasetItems = await runActor(buildSearchInput(cleanQuery));
+  const organicResults = datasetItems.flatMap((item) =>
+    Array.isArray(item?.organicResults) ? item.organicResults : [],
+  );
+
+  const seen = new Set();
+  return organicResults
+    .filter(isLikelyCourse)
+    .filter((result) => {
+      const url = String(result?.url || "").trim();
+      if (!url || seen.has(url)) return false;
+      seen.add(url);
+      return true;
+    })
+    .map(normalizeResult)
+    .sort((a, b) => a.position - b.position);
 }

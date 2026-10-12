@@ -17,7 +17,10 @@ export default async function connectDB() {
 
   globalForMongoose.__mongooseConnection = await mongoose.connect(uri);
 
-  console.log("MongoDB connected to:", mongoose.connection.name);
+  const databaseName = globalForMongoose.__mongooseConnection.connection?.name;
+  if (databaseName) {
+    console.log("MongoDB connected to:", databaseName);
+  }
 
   return globalForMongoose.__mongooseConnection;
 }

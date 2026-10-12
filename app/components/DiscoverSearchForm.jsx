@@ -17,7 +17,7 @@ export default function DiscoverSearchForm({ initialQuery = "" }) {
 
     const value = query.trim();
 
-    if (!value || pending) return;
+    if (!value || pending || value === initialQuery.trim()) return;
 
     setPending(true);
     router.push(`/discover?q=${encodeURIComponent(value)}`);

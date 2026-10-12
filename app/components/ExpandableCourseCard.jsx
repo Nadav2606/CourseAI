@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, ExternalLink, BookOpen } from "lucide-react";
 import SaveCourseButton from "@/app/components/SaveCourseButton";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -14,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export default function ExpandableCourseCard({
+  detailsId,
   title,
   description,
   provider,
@@ -22,63 +22,52 @@ export default function ExpandableCourseCard({
   loggedIn,
   initiallySaved,
 }) {
-  const [expanded, setExpanded] = useState(false);
-
   return (
-    <Card className={`result-card flex min-w-0 flex-col border-slate-200 bg-white shadow-sm ${expanded ? "result-card-expanded" : ""}`}>
-      <CardHeader className="space-y-4">
-        <div className="course-card-meta">
-          <Badge variant="secondary" className="course-provider rounded-full">
+    <Card className="result-card course-result-card">
+      <CardHeader className="course-result-header">
+        <div className="result-course-icon" aria-hidden="true"><BookOpen size={23} /></div>
+        <div className="course-result-meta">
+          <Badge variant="secondary" className="course-provider" dir="auto" title={provider}>
             {provider}
           </Badge>
-          <span className="course-category">{category}</span>
+          <span className="course-topic">{category}</span>
         </div>
 
-        <CardTitle className={expanded ? "course-result-title" : "course-result-title line-clamp-3"}>
+        <CardTitle dir="auto" className="course-result-title line-clamp-3">
           {title}
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="flex-1">
+      <CardContent className="course-result-content">
         {description ? (
           <>
-            <p className={`course-result-description ${expanded ? "" : "line-clamp-5"}`}>
+            <p className="course-result-description line-clamp-3">
               {description}
             </p>
-            <button
-              type="button"
-              className="course-expand-button"
-              onClick={() => setExpanded((value) => !value)}
-              aria-expanded={expanded}
-            >
-              {expanded ? (
-                <>
-                  הצג פחות <ChevronUp size={18} />
-                </>
-              ) : (
-                <>
-                  הצג עוד <ChevronDown size={18} />
-                </>
-              )}
-            </button>
+            {detailsId ? (
+              <Link href={`/discover/course/${detailsId}`} prefetch={false} className="course-expand-button">
+                הצג עוד <ArrowLeft size={17} />
+              </Link>
+            ) : (
+              <span className="course-detail-unavailable">מידע נוסף זמין באתר הקורס</span>
+            )}
           </>
         ) : (
-          <p className="course-result-description text-slate-400">
-            פרטים נוספים על הקורס זמינים בעמוד הקורס.
-          </p>
+          <>
+            <p className="course-result-description text-slate-400">פרטים נוספים על הקורס זמינים בעמוד הקורס.</p>
+            {detailsId && <Link href={`/discover/course/${detailsId}`} prefetch={false} className="course-expand-button">הצג עוד <ArrowLeft size={17} /></Link>}
+          </>
         )}
       </CardContent>
 
-      <CardFooter className="gap-2 border-slate-100 bg-slate-50/70">
+      <CardFooter className="course-result-footer">
         <SaveCourseButton
           loggedIn={loggedIn}
           initiallySaved={initiallySaved}
           course={{ title, provider, category, url }}
         />
-        <a href={url} target="_blank" rel="noopener noreferrer" className="flex-1">
-          <Button className="h-10 w-full">
-            לפרטים <ExternalLink />
-          </Button>
+        <a href={url} target="_blank" rel="noopener noreferrer" className="course-details-link">
+          לפרטים <ExternalLink size={17} />
         </a>
       </CardFooter>
     </Card>

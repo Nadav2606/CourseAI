@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/app/lib/auth";
 import connectDB from "@/app/lib/db";
 import Course from "@/app/models/Course";
+import mongoose from "mongoose";
 
 export async function addCourseAction(prevState, formData) {
   const user = await getSessionUser();
@@ -12,7 +13,10 @@ export async function addCourseAction(prevState, formData) {
   const provider = String(formData.get("provider") || "").trim();
   const category = String(formData.get("category") || "").trim();
   const notes = String(formData.get("notes") || "").trim();
-  if (title.length < 2) return { error: "נא להזין שם קורס", success: "" };
+  if (title.length < 2 || title.length > 200) return { error: "נא להזין שם קורס תקין", success: "" };
+  if (provider.length > 160 || category.length > 120 || notes.length > 1500) {
+    return { error: "אחד השדות ארוך מדי", success: "" };
+  }
 
   await connectDB();
   await Course.create({ userId: user.id, title, provider, category, notes });
@@ -24,6 +28,7 @@ export async function deleteCourseAction(formData) {
   const user = await getSessionUser();
   if (!user) return;
   const id = String(formData.get("id") || "");
+  if (!mongoose.isValidObjectId(id)) return;
   await connectDB();
   await Course.deleteOne({ _id: id, userId: user.id });
   revalidatePath("/courses");
@@ -37,7 +42,16 @@ export async function saveDiscoveredCourseAction(prevState, formData) {
   const provider = String(formData.get("provider") || "").trim();
   const category = String(formData.get("category") || "").trim();
   const sourceUrl = String(formData.get("sourceUrl") || "").trim();
-  if (title.length < 2) return { saved: false, error: "לא ניתן לשמור את הקורס" };
+  if (title.length < 2 || title.length > 200) return { saved: false, error: "לא ניתן לשמור את הקורס" };
+  if (provider.length > 160 || category.length > 120) return { saved: false, error: "פרטי הקורס אינם תקינים" };
+  if (sourceUrl) {
+    try {
+      const parsed = new URL(sourceUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("INVALID_URL");
+    } catch {
+      return { saved: false, error: "כתובת הקורס אינה תקינה" };
+    }
+  }
 
   await connectDB();
   const existing = await Course.findOne({ userId: user.id, ...(sourceUrl ? { sourceUrl } : { title }) });
